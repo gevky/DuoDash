@@ -1,0 +1,23 @@
+plugins { id 'com.android.application' }
+android {
+    namespace 'dev.nova.deck'
+    compileSdk 35
+    defaultConfig {
+        applicationId 'dev.nova.deck'
+        minSdk 33
+        targetSdk 33
+        versionCode 84
+        versionName '0.1.0-beta.1'
+        testInstrumentationRunner 'dev.nova.deck.DeviceChecks'
+    }
+    compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+    buildTypes { debug { applicationIdSuffix '' } }
+    testOptions { unitTests.returnDefaultValues = true }
+}
+dependencies {
+    implementation 'org.lsposed.hiddenapibypass:hiddenapibypass:6.1'
+    implementation 'com.github.MuntashirAkon:libadb-android:3.1.1'
+    implementation 'org.bouncycastle:bcpkix-jdk15to18:1.81'
+    implementation 'org.conscrypt:conscrypt-android:2.5.3'
+    testImplementation 'junit:junit:4.13.2'
+}

@@ -1,0 +1,42 @@
+<resources>
+    <style name="AppTheme" parent="android:style/Theme.Material.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:colorAccent">#75E6DE</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        <item name="android:statusBarColor">#090C12</item>
+        <item name="android:navigationBarColor">#090C12</item>
+        <item name="android:windowBackground">#090C12</item>
+        <item name="android:windowActionModeOverlay">true</item>
+    </style>
+    <style name="LaunchTheme" parent="AppTheme">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:backgroundDimEnabled">false</item>
+    </style>
+    <style name="DeckDialogTheme" parent="android:style/Theme.Material.Dialog.Alert">
+        <item name="android:colorAccent">#CEBFDB</item>
+        <item name="android:textColorPrimary">#F1F4FA</item>
+        <item name="android:textColorSecondary">#A6B2C5</item>
+        <item name="android:windowBackground">@drawable/dialog_background</item>
+        <item name="android:fontFamily">sans</item>
+    </style>
+    <style name="SettingsTheme" parent="AppTheme">
+        <item name="android:colorAccent">#D2C6DF</item>
+        <item name="android:colorControlActivated">#D2C6DF</item>
+        <item name="android:colorControlNormal">#B8B4BE</item>
+        <item name="android:colorControlHighlight">#35D2C6DF</item>
+        <item name="android:textColorPrimary">#F1EFF4</item>
+        <item name="android:textColorSecondary">#B8B4BE</item>
+        <item name="android:textColorHint">#B8B4BE</item>
+        <item name="android:editTextColor">#F1EFF4</item>
+        <item name="android:windowBackground">#101012</item>
+    </style>
+    <style name="MirrorTheme" parent="LaunchTheme">
+        <item name="android:windowDisablePreview">true</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+    </style>
+</resources>

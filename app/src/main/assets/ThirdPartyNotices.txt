@@ -1,0 +1,10 @@
+DuoDash third-party notices
+
+libadb-android 3.1.1 (https://github.com/MuntashirAkon/libadb-android): Apache-2.0 option; BSD-3-Clause and MIT notices for included upstream code are in BSD-3-Clause.txt and MIT.txt. Its spake2-android 2.2.1 dependency (https://github.com/MuntashirAkon/spake2-java) is LGPL-3.0; the license text is in SPAKE2-LGPL3.txt.
+
+Bouncy Castle 1.81 (https://www.bouncycastle.org/java.html): MIT; text in BouncyCastle-MIT.txt.
+Conscrypt 2.5.3 (https://github.com/google/conscrypt): Apache-2.0; text in Conscrypt-Apache-2.0.txt.
+AndroidX Annotation 1.9.1 and Kotlin standard library (https://developer.android.com/jetpack/androidx): Apache-2.0; text in Apache-2.0.txt.
+LSPosed AndroidHiddenApiBypass 6.1 (https://github.com/LSPosed/AndroidHiddenApiBypass): Apache-2.0; text in HiddenApiBypass-LICENSE.txt.
+
+DuoDash selects the Apache-2.0 licensing option for libadb-android. Source repositories and exact versions are listed above; transitive source and build metadata are declared in app/build.gradle.
