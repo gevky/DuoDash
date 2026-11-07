@@ -59,7 +59,8 @@ public final class ControlCatalog {
         e("gpu","GPU","GPU clock or usage, depending on the selected mode","Monitoring","metric",true),
         e("memory","Memory","Current memory usage","Monitoring","metric",true),
         e("power","Battery power","Battery power reading","Monitoring","metric",true),
-        e("refresh","Refresh monitor","Current display refresh rate, separate from game FPS","Monitoring","metric",false)
+        e("refresh","Refresh monitor","Current display refresh rate, separate from game FPS","Monitoring","metric",false),
+        e("quick_panel","Quick settings","Open Android quick-settings panel","Tools","action",false)
     ));
     public static List<Entry> entries(){return ENTRIES;}
     public static Entry find(String id){for(Entry e:ENTRIES)if(e.id.equals(id))return e;return null;}

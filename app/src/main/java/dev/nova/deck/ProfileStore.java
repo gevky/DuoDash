@@ -288,6 +288,11 @@ public final class ProfileStore {
                     prefs.getString(key+":hidden",ControlCatalog.defaultHidden()),"clear_recents","audio_output","controller_mouse","quick_settings");
             prefs.edit().putString(key+":hidden",hidden).putInt(key+":layoutVersion",7).apply();
         }
+        if(prefs.getInt(key+":layoutVersion",0)<8){
+            String hidden=ControlLogic.hideMissingOptionalControls(originalOrder,
+                    prefs.getString(key+":hidden",ControlCatalog.defaultHidden()),"quick_panel");
+            prefs.edit().putString(key+":hidden",hidden).putInt(key+":layoutVersion",8).apply();
+        }
     }
     public String wide(String key){return ControlLogic.cleanHidden(prefs.getString(layoutStorageKey(key,SharedDashboardLayout.WIDE),""));}
     public void wide(String key,String value){prefs.edit().putString(layoutStorageKey(key,SharedDashboardLayout.WIDE),ControlLogic.cleanHidden(value)).apply();}

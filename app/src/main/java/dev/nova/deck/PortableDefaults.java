@@ -26,7 +26,7 @@ final class PortableDefaults {
     static final String SMALL_CONTROLS = "wifi,bluetooth";
     static final int LAYOUT_VERSION = 6;
     static final String ORDER = "both,upper,main,audio_upper,audio_main,volume,quick_settings,wifi,bluetooth,screenshot,apps,clear_recents,controller_style,night,dark,swap,up,down,rotation,dnd,keyboard,shortcuts,display_settings,audio_settings,fan,performance,charging,trigger_mode,charge_limit,led,keep_awake,force_landscape,game_assistant,airplane,battery_saver,inversion,cast,hotspot,location,refresh_mode,screenrecord,fps,temp,fan_speed,cpu,gpu,memory,power,refresh";
-    static final String HIDDEN = "swap,up,down,rotation,dnd,keyboard,shortcuts,display_settings,audio_settings,fan,performance,charging,trigger_mode,charge_limit,led,keep_awake,force_landscape,game_assistant,airplane,battery_saver,inversion,cast,hotspot,location,refresh_mode,screenrecord,audio_output,controller_mouse";
+    static final String HIDDEN = "swap,up,down,rotation,dnd,keyboard,shortcuts,display_settings,audio_settings,fan,performance,charging,trigger_mode,charge_limit,led,keep_awake,force_landscape,game_assistant,airplane,battery_saver,inversion,cast,hotspot,location,refresh_mode,screenrecord,audio_output,controller_mouse,quick_panel";
 
     static final class App {
         final String label, packageName, component;

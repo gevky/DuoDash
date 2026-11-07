@@ -120,10 +120,14 @@ final class SetupWizardView extends LinearLayout {
         title.setText(live?"Device connected":paired?"Reconnect this device":"Connect this device");
         description.setText(paired?
             "DuoDash has saved this device’s pairing. Reconnect when Wireless debugging is available; no new pairing code is needed.":
-            "1. Tap Start pairing to open Developer options.\n2. Turn on Wireless debugging, then tap Pair device with pairing code.\n3. Keep that dialog open and enter its code on the DuoDash keypad.");
+            "1. Tap Start pairing to open Developer options.\n2. Turn on Wireless debugging, then tap Pair device with pairing code.\n3. Keep that dialog open and enter its code on the DuoDash keypad. DuoDash then turns on USB debugging automatically.");
         row("Device pairing",paired?"Saved on this device":"Not paired yet",paired?"Saved":"Required",paired,null,()->{});
         if(paired){
             row("System controls",live?"Connected":"Waiting for system controls",live?"Connected":"Waiting",live,null,null);
+            if(!status.usbDebuggingEnabled){
+                row("USB debugging","DuoDash keeps USB debugging on after pairing. No cable is needed, and Wi-Fi may be off.","Needed",false,"Enable",()->actions.reconnect());
+                smallAction("Open Developer options",()->actions.developerOptions());
+            }else row("USB debugging","Stays on after pairing. No cable is needed, and Wi-Fi may be off.","On",true,null,null);
             if(!live){smallAction("Open Developer options",()->actions.developerOptions());pairAgainHelp(status);}
         }else{
             boolean devOptions=developerOptionsEnabled();
@@ -231,7 +235,7 @@ final class SetupWizardView extends LinearLayout {
     private void primaryAction(){
         if(busy)return;
         if(step==0){if(status==null){actions.refresh();return;}if(!status.overlayAllowed){actions.overlayPermission();return;}if(!status.accessibilityEnabled||!status.accessibilityBound){actions.accessibilitySettings();return;}actions.next();}
-        else if(step==1){if(status!=null&&status.paired&&status.liveHelperReady)actions.next();else if(status!=null&&status.paired)actions.reconnect();else if(status==null){actions.refresh();}else if(!status.notificationsPermissionGranted){actions.notificationPermission();}else if(!developerOptionsEnabled())actions.aboutDevice();else actions.pairThisDevice();}
+        else if(step==1){if(status!=null&&status.paired&&status.liveHelperReady&&status.usbDebuggingEnabled)actions.next();else if(status!=null&&status.paired)actions.reconnect();else if(status==null){actions.refresh();}else if(!status.notificationsPermissionGranted){actions.notificationPermission();}else if(!developerOptionsEnabled())actions.aboutDevice();else actions.pairThisDevice();}
         else if(status==null)actions.refresh();
         else if(!status.shortcutConfigured&&status.paired&&!status.liveHelperReady)actions.reconnect();
         else if(status.canFinish())actions.finish();
@@ -242,7 +246,7 @@ final class SetupWizardView extends LinearLayout {
     private String primaryTitle(){
         if(busy)return "Checking…";
         if(step==0){if(status==null)return "Checking permissions…";if(!status.overlayAllowed)return "Allow display over apps";if(!status.accessibilityEnabled||!status.accessibilityBound)return "Open Accessibility";return "Continue";}
-        if(step==1){if(status==null)return "Check pairing";if(status.paired&&status.liveHelperReady)return "Continue";if(status.paired)return "Reconnect system controls";if(!status.notificationsPermissionGranted)return "Allow notifications";if(!developerOptionsEnabled())return "Open About device";return status.canStartPairing()?"Start pairing":"Pair this device";}
+        if(step==1){if(status==null)return "Check pairing";if(status.paired&&status.liveHelperReady&&status.usbDebuggingEnabled)return "Continue";if(status.paired)return status.usbDebuggingEnabled?"Reconnect system controls":"Enable USB debugging";if(!status.notificationsPermissionGranted)return "Allow notifications";if(!developerOptionsEnabled())return "Open About device";return status.canStartPairing()?"Start pairing":"Pair this device";}
         if(status!=null&&status.canFinish())return "Finish setup";
         if(status!=null&&!status.shortcutConfigured&&status.paired&&!status.liveHelperReady)return "Reconnect system controls";
         if(status!=null&&!status.shortcutConfigured)return "Record a button shortcut first";

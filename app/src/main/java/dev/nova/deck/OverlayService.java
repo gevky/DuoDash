@@ -53,9 +53,10 @@ public final class OverlayService extends Service implements DeckController.Host
     private AlertDialog activeDialog;
     private ScreenshotCapture screenshotCapture;
     boolean settingsOpen;
-    private boolean settingsReadinessKnown,settingsLastBridge,settingsLastAccessibilityEnabled,settingsLastAccessibilityBound,settingsRefreshPending;
+    private boolean settingsReadinessKnown,settingsLastBridge,settingsLastAccessibilityEnabled,settingsLastAccessibilityBound,settingsLastUsbDebugging,settingsRefreshPending;
     private TextView connectionStatusView,connectionHelpView;
     private Button restoreControlsButton;
+    private Button usbDebuggingButton;
     private boolean restoreRequested,activationLaunched,wifiPanelOpen,wifiPanelSeenSettings,autoRecoveryAttempted;
     private String restoreFailure="";
     private final Handler resolutionUiHandler=new Handler(Looper.getMainLooper());
@@ -386,13 +387,13 @@ public final class OverlayService extends Service implements DeckController.Host
     }
     private boolean accessibilityBound(){return DeckAccessibilityService.connected!=null;}
     private void rememberSettingsReadiness(){
-        settingsReadinessKnown=true;settingsLastBridge=controller.state.bridgeReady;settingsLastAccessibilityEnabled=SetupReadiness.isAccessibilityServiceEnabled(this);settingsLastAccessibilityBound=accessibilityBound();settingsRefreshPending=false;
+        settingsReadinessKnown=true;settingsLastBridge=controller.state.bridgeReady;settingsLastAccessibilityEnabled=SetupReadiness.isAccessibilityServiceEnabled(this);settingsLastAccessibilityBound=accessibilityBound();settingsLastUsbDebugging=UsbDebugging.isEnabled(this);settingsRefreshPending=false;
     }
     private void refreshSettingsReadiness(UiState state){
         if(settingsPage==null)return;
-        boolean enabled=SetupReadiness.isAccessibilityServiceEnabled(this),bound=accessibilityBound();
-        if(!settingsReadinessKnown||settingsLastBridge!=state.bridgeReady||settingsLastAccessibilityEnabled!=enabled||settingsLastAccessibilityBound!=bound){
-            settingsReadinessKnown=true;settingsLastBridge=state.bridgeReady;settingsLastAccessibilityEnabled=enabled;settingsLastAccessibilityBound=bound;settingsRefreshPending=true;
+        boolean enabled=SetupReadiness.isAccessibilityServiceEnabled(this),bound=accessibilityBound(),usb=UsbDebugging.isEnabled(this);
+        if(!settingsReadinessKnown||settingsLastBridge!=state.bridgeReady||settingsLastAccessibilityEnabled!=enabled||settingsLastAccessibilityBound!=bound||settingsLastUsbDebugging!=usb){
+            settingsReadinessKnown=true;settingsLastBridge=state.bridgeReady;settingsLastAccessibilityEnabled=enabled;settingsLastAccessibilityBound=bound;settingsLastUsbDebugging=usb;settingsRefreshPending=true;
         }
         if(settingsRefreshPending&&("connection".equals(settingsPage.category())||"dashboard".equals(settingsPage.category()))&&(inlineShortcutEditor==null||!inlineShortcutEditor.isRecording())){
             settingsRefreshPending=false;
@@ -578,14 +579,17 @@ public final class OverlayService extends Service implements DeckController.Host
     private void updateConnectionStatus(){
         if(connectionStatusView==null||controller==null)return;
         boolean paired=OnDeviceBridge.isPaired(this);
+        boolean usb=UsbDebugging.isEnabled(this);
         boolean connecting=BridgeActivationService.isConnecting()||activationLaunched;
-        String status=controller.state.bridgeReady?"Connected":connecting?nonempty(BridgeActivationService.currentMessage(),"Restoring controls…")
+        String status=controller.state.bridgeReady?(usb?"Connected":"Connected · USB debugging is off"):connecting?nonempty(BridgeActivationService.currentMessage(),"Restoring controls…")
                 :restoreRequested&&!controller.state.wifiConnected?"Waiting for Wi-Fi":!restoreFailure.isEmpty()?restoreFailure:"System controls unavailable";
         connectionStatusView.setText(status);
         if(connectionHelpView!=null){
             if(!paired)connectionHelpView.setText("Pair this device from Android Wireless debugging. Local controls and profiles remain available.");
-            else connectionHelpView.setText("Connect to Wi-Fi briefly to restore controls. Wireless debugging returns to its previous setting.");
+            else if(controller.state.bridgeReady)connectionHelpView.setText(usb?"USB debugging keeps controls working with Wi-Fi off. No cable is needed.":"Enable USB debugging below before turning Wi-Fi off.");
+            else connectionHelpView.setText("Connect to Wi-Fi briefly to restore controls. Keep USB debugging on afterward. Wireless debugging returns to its previous setting.");
         }
+        if(usbDebuggingButton!=null){usbDebuggingButton.setText(usb?"On":"Enable");usbDebuggingButton.setEnabled(!usb&&!connecting);}
         if(restoreControlsButton!=null){
             restoreControlsButton.setText(paired?"Restore controls":"Pair this device");
             restoreControlsButton.setEnabled(!connecting&&!controller.state.bridgeReady);
@@ -646,6 +650,7 @@ public final class OverlayService extends Service implements DeckController.Host
         sectionLabel(content,"System controls");connectionStatusView=new TextView(content.getContext());connectionStatusView.setTextSize(14);connectionStatusView.setTextColor(0xfff1eff4);content.addView(connectionStatusView,new LinearLayout.LayoutParams(-1,dp(34)));
         connectionHelpView=new TextView(content.getContext());connectionHelpView.setTextSize(12);connectionHelpView.setTextColor(0xffb8b4be);content.addView(connectionHelpView,new LinearLayout.LayoutParams(-1,-2));
         restoreControlsButton=new Button(content.getContext());styleSettingsButton(restoreControlsButton);content.addView(restoreControlsButton,new LinearLayout.LayoutParams(-1,dp(48)));restoreControlsButton.setOnClickListener(v->startRestoreControls());updateConnectionStatus();
+        LinearLayout usb=settingsRow(content);rowText(usb,"USB debugging","Keep on for controls with Wi-Fi off. No cable needed.");usbDebuggingButton=new Button(content.getContext());styleSettingsButton(usbDebuggingButton);usb.addView(usbDebuggingButton,new LinearLayout.LayoutParams(dp(100),dp(44)));usbDebuggingButton.setOnClickListener(v->{try{UsbDebugging.ensureEnabled(this);restoreFailure="";updateConnectionStatus();controller.refreshConnection();}catch(Exception blocked){restoreFailure=nonempty(blocked.getMessage(),"Turn on USB debugging in Developer options.");updateConnectionStatus();openDeveloperOptions();}});updateConnectionStatus();
         Button developer=new Button(content.getContext());developer.setText("Open Developer options");styleSettingsButton(developer);content.addView(developer,new LinearLayout.LayoutParams(-1,dp(48)));developer.setOnClickListener(v->openDeveloperOptions());
         sectionLabel(content,"Permissions and notifications");boolean accessibilityEnabled=SetupReadiness.isAccessibilityServiceEnabled(this);LinearLayout access=settingsRow(content);rowText(access,"Always-visible controls",accessibilityEnabled?"Enabled":"Off");Button accessButton=new Button(content.getContext());accessButton.setText(accessibilityEnabled?"Manage":"Set up");styleSettingsButton(accessButton);access.addView(accessButton,new LinearLayout.LayoutParams(dp(100),dp(44)));accessButton.setOnClickListener(v->openSettings(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS));
         LinearLayout notify=settingsRow(content);rowText(notify,"Background notification","Hide this category in Android settings. Controls will keep working.");Button notifyButton=new Button(content.getContext());notifyButton.setText("Manage");styleSettingsButton(notifyButton);notify.addView(notifyButton,new LinearLayout.LayoutParams(dp(100),dp(44)));notifyButton.setOnClickListener(v->openControlsNotificationSettings());
@@ -859,6 +864,7 @@ public final class OverlayService extends Service implements DeckController.Host
                 startScreenshotCapture();return;
             case "audio_output":openAudioOutput();return;
             case "quick_settings":openSettings(android.provider.Settings.ACTION_SETTINGS);return;
+            case "quick_panel":openQuickSettings();return;
             case "display_settings":openSettings(android.provider.Settings.ACTION_DISPLAY_SETTINGS);return;
             case "audio_settings":openSettings(android.provider.Settings.ACTION_SOUND_SETTINGS);return;
             case "cast":openSettings(android.provider.Settings.ACTION_CAST_SETTINGS);return;
@@ -897,6 +903,15 @@ public final class OverlayService extends Service implements DeckController.Host
     }
     private String targetPackage(Intent intent){android.content.pm.ResolveInfo resolved=getPackageManager().resolveActivity(intent,android.content.pm.PackageManager.MATCH_DEFAULT_ONLY);return resolved==null||resolved.activityInfo==null?"":resolved.activityInfo.packageName;}
     private void openSettings(String action){Intent intent=new Intent(action).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);int target=controller.dockedMode()?0:controller.dashboardDisplayId();if(target==0&&!controller.dockedMode())controller.wakeHandheldForActivity(targetPackage(intent));dismissForLaunch();try{startActivity(intent,ActivityOptions.makeBasic().setLaunchDisplayId(target).toBundle());}catch(ActivityNotFoundException error){message("Android settings are unavailable");}}
+    private void openQuickSettings(){
+        DeckAccessibilityService accessibility=DeckAccessibilityService.connected;
+        if(accessibility==null){message("Enable DuoDash in Accessibility to open Quick settings.");return;}
+        controller.wakeHandheldForActivity("com.android.systemui");
+        dismissForLaunch();
+        resolutionUiHandler.postDelayed(()->{
+            if(current==this&&!accessibility.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_QUICK_SETTINGS))message("Android could not open Quick settings.");
+        },180);
+    }
     private void openAudioOutput(){
         Intent systemUi=new Intent(ACTION_LAUNCH_MEDIA_OUTPUT_DIALOG).setPackage(PACKAGE_SYSTEM_UI)
             .putExtra(EXTRA_MEDIA_OUTPUT_PACKAGE,getPackageName());

@@ -8,7 +8,7 @@ Then there's switching between the add-on, a TV and AR glasses, each needing dif
 
 Thanks to the awesome people who helped test it and shape how it works.
 
-**[Releases](https://github.com/gevky/DuoDash/releases)** · Android 13+
+**[Releases](https://github.com/gevky/DuoDash/releases)** · **[Add to Obtainium](https://apps.obtainium.imranr.dev/redirect?r=obtainium://app/%7B%22id%22%3A%22dev.nova.deck%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2Fgevky%2FDuoDash%22%2C%22author%22%3A%22gevky%22%2C%22name%22%3A%22DuoDash%22%2C%22overrideSource%22%3A%22GitHub%22%2C%22additionalSettings%22%3A%22%7B%5C%22includePrereleases%5C%22%3Atrue%7D%22%7D)** · Android 13+
 
 Tested on Retroid Pocket Nova. Other devices and hardware controls depend on firmware.
 
@@ -20,15 +20,17 @@ The three-step wizard guides you through:
 2. Pairing system controls through Wireless debugging.
 3. Saving a controller shortcut, then finishing setup.
 
-Connect to Wi-Fi for pairing. Keep Android's pairing-code window open while entering the code in DuoDash.
+Connect to Wi-Fi for pairing. Keep Android's pairing-code window open while entering the code in DuoDash. After pairing, DuoDash enables USB debugging so controls keep working with Wi-Fi off. Setup checks that it is on and offers Developer options if Android blocks the change.
 
-Wi-Fi and Wireless debugging can be turned off afterward. After a restart, briefly enable them if needed and use **Settings → Connection → Restore controls**. Your pairing and layout stay saved.
+Keep **USB debugging on**. No USB cable or computer is needed during use. Wi-Fi and Wireless debugging can be turned off afterward. After a restart, briefly enable them if needed and use **Settings → Connection → Restore controls**. Your pairing and layout stay saved.
 
 ## Using DuoDash
 
 Without an external display, DuoDash shows only main brightness and master volume. The four dual-screen bars return when you reconnect, unless you removed them in Edit mode.
 
 Your shortcut opens and closes the dashboard. **Tap the DuoDash logo** for **Close**, **Edit** and **Settings**. The dashboard's Settings control button opens Android settings.
+
+**Quick settings** is an optional control you can add in Edit mode. It opens Android's quick-settings panel.
 
 In **Edit**, hold and drag to move controls. Tap a control button's left side to shrink it or right side to grow it. Use the minus to remove it, **Add control** or **Add an app** to add one, and **Done** to finish. **Undo** takes you back a step. Tap CPU or GPU to switch between usage and clock speed.
 

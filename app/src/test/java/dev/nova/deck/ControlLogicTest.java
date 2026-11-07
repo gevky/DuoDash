@@ -236,5 +236,11 @@ public class ControlLogicTest {
         assertFalse(Arrays.asList(once.split(",")).contains("audio_output"));
         assertEquals(once,ControlLogic.hideMissingOptionalControls(order,once,"clear_recents","audio_output","controller_mouse","quick_settings"));
     }
+    @Test public void quickPanelMigrationHidesOnlyWhenItWasAbsentFromSavedOrder(){
+        String missing=ControlLogic.hideMissingOptionalControls("wifi,apps","bluetooth","quick_panel");
+        assertEquals("bluetooth,quick_panel",missing);
+        String chosen=ControlLogic.hideMissingOptionalControls("wifi,quick_panel,apps","bluetooth","quick_panel");
+        assertEquals("bluetooth",chosen);
+    }
 
 }

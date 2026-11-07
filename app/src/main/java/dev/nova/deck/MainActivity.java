@@ -43,10 +43,10 @@ public final class MainActivity extends Activity {
                 openDashboard(forced&&status.recoveryMode());return;
             }
             if(!stepInitialized){
-                if(forced)step=status.paired&&status.liveHelperReady?2:status.overlayAllowed&&status.accessibilityBound?1:0;
+                if(forced)step=status.paired&&status.liveHelperReady&&status.usbDebuggingEnabled?2:status.overlayAllowed&&status.accessibilityBound?1:0;
                 else if(!status.overlayAllowed||!status.accessibilityEnabled||!status.accessibilityBound
                         ||status.needsPairing()&&!status.canStartPairing())step=0;
-                else if(status.needsPairing()||!status.liveHelperReady)step=1;
+                else if(status.needsPairing()||!status.liveHelperReady||!status.usbDebuggingEnabled)step=1;
                 else step=2;
                 stepInitialized=true;
             }

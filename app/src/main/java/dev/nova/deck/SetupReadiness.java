@@ -26,6 +26,7 @@ public final class SetupReadiness {
         public final boolean accessibilityEnabled;
         public final boolean accessibilityBound;
         public final boolean paired;
+        public final boolean usbDebuggingEnabled;
         public final boolean persistentReconnectGranted;
         public final boolean liveHelperReady;
         public final boolean notificationsPermissionGranted;
@@ -36,29 +37,21 @@ public final class SetupReadiness {
         public final int completedVersion;
 
         public Status(boolean overlayAllowed,boolean accessibilityEnabled,boolean accessibilityBound,
-                boolean paired,boolean persistentReconnectGranted,boolean liveHelperReady,
+                boolean paired,boolean usbDebuggingEnabled,boolean persistentReconnectGranted,boolean liveHelperReady,
                 boolean notificationsPermissionGranted,boolean notificationsEnabled,
                 boolean pairingChannelEnabled,boolean shortcutConfigured,boolean floatingButtonEnabled,
                 int completedVersion){
             this.overlayAllowed=overlayAllowed;this.accessibilityEnabled=accessibilityEnabled;
-            this.accessibilityBound=accessibilityBound;this.paired=paired;
+            this.accessibilityBound=accessibilityBound;this.paired=paired;this.usbDebuggingEnabled=usbDebuggingEnabled;
             this.persistentReconnectGranted=persistentReconnectGranted;this.liveHelperReady=liveHelperReady;
             this.notificationsPermissionGranted=notificationsPermissionGranted;
             this.notificationsEnabled=notificationsEnabled;this.pairingChannelEnabled=pairingChannelEnabled;
             this.shortcutConfigured=shortcutConfigured;this.floatingButtonEnabled=floatingButtonEnabled;
             this.completedVersion=completedVersion;
         }
-        /** Compatibility constructor for callers that predate the required shortcut. */
-        public Status(boolean overlayAllowed,boolean accessibilityEnabled,boolean accessibilityBound,
-                boolean paired,boolean persistentReconnectGranted,boolean liveHelperReady,
-                boolean notificationsPermissionGranted,boolean notificationsEnabled,
-                boolean pairingChannelEnabled,int completedVersion){
-            this(overlayAllowed,accessibilityEnabled,accessibilityBound,paired,persistentReconnectGranted,liveHelperReady,
-                notificationsPermissionGranted,notificationsEnabled,pairingChannelEnabled,true,true,completedVersion);
-        }
         public boolean canFinish(){
             return overlayAllowed&&accessibilityEnabled&&accessibilityBound&&paired
-                &&persistentReconnectGranted&&liveHelperReady&&shortcutConfigured;
+                &&usbDebuggingEnabled&&persistentReconnectGranted&&liveHelperReady&&shortcutConfigured;
         }
         public boolean hasLocalDashboardPrerequisites(){
             return overlayAllowed&&accessibilityEnabled&&accessibilityBound&&shortcutConfigured;
@@ -66,7 +59,7 @@ public final class SetupReadiness {
         /** A completed install may open offline; Connection settings repairs pair/helper state. */
         public boolean canShowDashboard(){return isCompleted()&&hasLocalDashboardPrerequisites();}
         public boolean needsSetup(){return !canShowDashboard();}
-        public boolean recoveryMode(){return isCompleted()&&(!paired||!persistentReconnectGranted||!liveHelperReady);}
+        public boolean recoveryMode(){return isCompleted()&&(!paired||!usbDebuggingEnabled||!persistentReconnectGranted||!liveHelperReady);}
         public boolean needsPairing(){return !paired;}
         /** The in-app keypad is the primary path; notifications are an optional fallback. */
         public boolean canStartPairing(){return !paired;}
@@ -93,6 +86,7 @@ public final class SetupReadiness {
         boolean accessEnabled=isAccessibilityServiceEnabled(app);
         boolean accessBound=DeckAccessibilityService.connected!=null;
         boolean paired=OnDeviceBridge.isPaired(app);
+        boolean usbDebugging=UsbDebugging.isEnabled(app);
         boolean persistent=app.checkSelfPermission(Manifest.permission.WRITE_SECURE_SETTINGS)==PackageManager.PERMISSION_GRANTED;
         boolean postPermission=Build.VERSION.SDK_INT<33||app.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)==PackageManager.PERMISSION_GRANTED;
         NotificationManager manager=app.getSystemService(NotificationManager.class);
@@ -106,7 +100,7 @@ public final class SetupReadiness {
         android.content.SharedPreferences ui=app.getSharedPreferences("ui",Context.MODE_PRIVATE);
         boolean shortcutConfigured=ShortcutMatcher.hasConfiguredToggle(ui.getString("shortcuts",""));
         boolean floatingButton=ui.getBoolean("floatingButton",true);
-        return new Status(overlay,accessEnabled,accessBound,paired,persistent,liveHelperReady,
+        return new Status(overlay,accessEnabled,accessBound,paired,usbDebugging,persistent,liveHelperReady,
             postPermission,notifications,pairChannel,shortcutConfigured,floatingButton,completed);
     }
 

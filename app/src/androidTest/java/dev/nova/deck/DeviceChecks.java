@@ -1141,6 +1141,122 @@ public final class DeviceChecks extends Instrumentation {
         }catch(Exception e){throw new RuntimeException(e);}});
         require(saved.equals(getTargetContext().getSharedPreferences("display_profiles",0).getAll()),"Rendering changed profile preferences");
     }
+    private void checkDebuggingKeepAlive(UiAutomation automation) throws Exception {
+        Context context=getTargetContext();
+        int originalWireless=android.provider.Settings.Global.getInt(context.getContentResolver(),"adb_wifi_enabled",0);
+        require(originalWireless==1,"Enable Wireless debugging before the device check");
+        SharedPreferences profiles=context.getSharedPreferences("display_profiles",0);
+        Map<String,?> beforeProfiles=new HashMap<>(profiles.getAll());
+        boolean wifiDisabled=false;
+        JSONObject proof=new JSONObject();
+        try {
+            require(context.checkSelfPermission(android.Manifest.permission.WRITE_SECURE_SETTINGS)==android.content.pm.PackageManager.PERMISSION_GRANTED,"Restore permission missing");
+            require(android.provider.Settings.Global.putInt(context.getContentResolver(),android.provider.Settings.Global.ADB_ENABLED,0),"Could not establish USB-off fixture");
+            require(!UsbDebugging.isEnabled(context),"USB-off fixture did not apply");
+            Thread.sleep(2000);
+            OnDeviceBridge.reconnectAndStart(context);
+            require(UsbDebugging.isEnabled(context),"Restore did not automatically enable USB debugging");
+            BridgeClient bridge=new BridgeClient(context);
+            require(bridge.isHealthy(),"Restored helper is unavailable");
+            proof.put("usb_auto_enabled",true);
+            Thread.sleep(12000);
+            String pid=shellOutput(automation,"pidof nova_deck").trim();
+            require(pid.matches("[0-9]+"),"Expected one authenticated helper process");
+            shell(automation,"kill "+pid);
+            Thread.sleep(400);
+            require(android.provider.Settings.Global.putInt(context.getContentResolver(),android.provider.Settings.Global.ADB_ENABLED,0),"Could not establish cold-start USB-off fixture");
+            Thread.sleep(2000);
+            OnDeviceBridge.reconnectAndStart(context);
+            require(UsbDebugging.isEnabled(context)&&bridge.isHealthy(),"Cold startup did not enable USB and start the helper");
+            proof.put("cold_start_usb_enabled",true);
+            Thread.sleep(12000);
+            proof.put("usb_after_wait",UsbDebugging.isEnabled(context));
+            proof.put("adbd_before_disable",shellOutput(automation,"pidof adbd").trim());
+            require(bridge.isHealthy(),"Helper died before disabling Wireless debugging");
+            android.provider.Settings.Global.putInt(context.getContentResolver(),"adb_wifi_enabled",0);
+            Thread.sleep(1500);
+            require(bridge.isHealthy(),"Helper died when Wireless debugging was disabled with USB on");
+            proof.put("wireless_debugging_off_helper_healthy",true);
+            wifiDisabled=true;
+            shell(automation,"svc wifi disable");
+            Thread.sleep(2000);
+            require("0".equals(shellOutput(automation,"settings get global wifi_on").trim()),"Wi-Fi did not turn off");
+            require(UsbDebugging.isEnabled(context)&&bridge.isHealthy(),"Helper died when Wi-Fi was turned off");
+            proof.put("wifi_off_helper_healthy",true);
+            int main=bridge.request("status",null).getInt("main");
+            int probe=main<=85?main+10:main-10;
+            bridge.request("main_preview",new JSONObject().put("percent",main));
+            bridge.request("main_preview_clear",null);
+            Thread.sleep(400);
+            int backlightBefore=Integer.parseInt(shellOutput(automation,"cat /sys/class/backlight/panel0-backlight/brightness").trim());
+            try {
+                bridge.request("main_preview",new JSONObject().put("percent",probe));
+                Thread.sleep(400);
+                int changed=Integer.parseInt(shellOutput(automation,"cat /sys/class/backlight/panel0-backlight/brightness").trim());
+                require(changed!=backlightBefore,"Offline control request did not change the physical backlight");
+                proof.put("offline_backlight_changed",true);
+            } finally {
+                bridge.request("main_preview",new JSONObject().put("percent",main));
+                bridge.request("main_preview_clear",null);
+            }
+            Thread.sleep(400);
+            int backlightRestored=Integer.parseInt(shellOutput(automation,"cat /sys/class/backlight/panel0-backlight/brightness").trim());
+            int maximum=Integer.parseInt(shellOutput(automation,"cat /sys/class/backlight/panel0-backlight/max_brightness").trim());
+            proof.put("backlight_before",backlightBefore).put("backlight_restored",backlightRestored);
+            require(Math.abs(backlightRestored-backlightBefore)<=Math.max(1,maximum/50),"Offline preview did not restore original backlight within hardware rounding tolerance");
+            require(beforeProfiles.equals(profiles.getAll()),"Keepalive test changed saved profiles");
+            proof.put("profiles_preserved",true).put("passed",true);
+        } catch(Exception|AssertionError failure) {
+            proof.put("passed",false).put("failure",failure.toString()).put("usb_at_failure",UsbDebugging.isEnabled(context));
+            throw failure;
+        } finally {
+            UsbDebugging.ensureEnabled(context);
+            if(wifiDisabled)shell(automation,"svc wifi enable");
+            android.net.ConnectivityManager connectivity=context.getSystemService(android.net.ConnectivityManager.class);
+            long deadline=SystemClock.elapsedRealtime()+15000;
+            while(SystemClock.elapsedRealtime()<deadline){
+                boolean connected=false;
+                for(android.net.Network network:connectivity.getAllNetworks()){
+                    android.net.NetworkCapabilities capabilities=connectivity.getNetworkCapabilities(network);
+                    if(capabilities!=null&&capabilities.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI)){connected=true;break;}
+                }
+                if(connected)break;
+                Thread.sleep(250);
+            }
+            android.provider.Settings.Global.putInt(context.getContentResolver(),"adb_wifi_enabled",originalWireless);
+            try(FileOutputStream output=context.openFileOutput("beta2-debugging-proof.json",Context.MODE_PRIVATE)){
+                output.write(proof.toString(2).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            }
+        }
+    }
+
+    private void checkQuickPanel(UiAutomation automation) throws Exception {
+        rebindEnabledAccessibilityService(automation);
+        Context context=getTargetContext();
+        context.startForegroundService(new Intent(context,OverlayService.class).setAction(OverlayService.SHOW));
+        waitFor(()->{ui(()->{service=OverlayService.current;if(service!=null)try{controller=(DeckController)field(service,"controller");}catch(Exception e){throw new RuntimeException(e);}});return controller!=null;},"Overlay service missing");
+        waitFor(()->controller.state.bridgeReady,"Helper unavailable");
+        waitFor(()->panel()!=null&&panel().isAttachedToWindow(),"Dashboard missing");
+        waitForStableProfile();
+        Map<String,?> originalProfiles=new HashMap<>(context.getSharedPreferences("display_profiles",0).getAll());
+        require("Settings".equals(ControlCatalog.find("quick_settings").label),"Default Settings control changed");
+        require(!ControlCatalog.find("quick_panel").defaultShown,"Quick settings must remain optional");
+        try {
+            ui(()->service.performControl("quick_panel"));
+            waitFor(()->{try{return dev.nova.deck.bridge.FocusedShadeParser.isNotificationShadeFocused(shellOutput(automation,"dumpsys window displays"),0);}catch(Exception e){return false;}},"Quick settings did not take focus");
+            require(!Boolean.TRUE.equals(field(service,"panelShowing")),"Dashboard blocked the quick-settings panel");
+            Thread.sleep(900);
+            Bitmap screenshot=automation.takeScreenshot();
+            require(screenshot!=null,"Could not capture Quick settings");
+            try(FileOutputStream output=context.openFileOutput("beta2-quick-panel.png",Context.MODE_PRIVATE)){screenshot.compress(Bitmap.CompressFormat.PNG,100,output);}finally{screenshot.recycle();}
+        } finally {
+            DeckAccessibilityService accessibility=DeckAccessibilityService.connected;
+            if(accessibility!=null){accessibility.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK);Thread.sleep(200);accessibility.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK);}
+            context.startForegroundService(new Intent(context,OverlayService.class).setAction(OverlayService.SHOW));
+        }
+        require(originalProfiles.equals(context.getSharedPreferences("display_profiles",0).getAll()),"Opening Quick settings changed profiles");
+    }
+
     @Override public void onStart(){
         Bundle result=new Bundle();boolean pass=false;
         try{
@@ -1167,6 +1283,8 @@ public final class DeviceChecks extends Instrumentation {
                 pass=true;finish(Activity.RESULT_OK,result);return;
             }
             UiAutomation automation=getUiAutomation(UiAutomation.FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES);
+            if("debuggingkeepalive".equals(launchArguments==null?null:launchArguments.getString("mode"))){checkDebuggingKeepAlive(automation);result.putString("checks","USB-off restore and cold startup enabled USB debugging; helper and physical brightness control survived Wireless debugging and Wi-Fi off; profiles and backlight restored");pass=true;finish(Activity.RESULT_OK,result);return;}
+            if("quickpanel".equals(launchArguments==null?null:launchArguments.getString("mode"))){checkQuickPanel(automation);result.putString("checks","Optional Quick settings opened the focused Android shade after closing DuoDash; default Settings unchanged; profiles preserved");pass=true;finish(Activity.RESULT_OK,result);return;}
             if("pairingpanel".equals(launchArguments==null?null:launchArguments.getString("mode"))){
                 String geometry=checkPairingPanel();result.putString("panel_geometry",geometry);
                 result.putString("capture","pairing-panel-beta3.png");

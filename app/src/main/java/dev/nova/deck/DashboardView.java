@@ -1445,6 +1445,8 @@ public final class DashboardView extends FrameLayout {
                 return ControlIcon.MOUSE;
             case "quick_settings":
                 return ControlIcon.QUICK_SETTINGS;
+            case "quick_panel":
+                return ControlIcon.QUICK_SETTINGS;
             case "shortcuts":
                 return ControlIcon.SHORTCUTS;
             case "display_settings":

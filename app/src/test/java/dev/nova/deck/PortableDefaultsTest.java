@@ -38,6 +38,16 @@ public class PortableDefaultsTest {
             assertTrue(id+" should remain opt-in for fresh installs",hidden(id));
         assertFalse("The refresh-Hz monitor should be visible on fresh installs",hidden("refresh"));
         assertEquals("Settings",ControlCatalog.find("quick_settings").label);
+        assertEquals("Open Android system settings",ControlCatalog.find("quick_settings").description);
+        ControlCatalog.Entry quickPanel=ControlCatalog.find("quick_panel");
+        assertNotNull(quickPanel);
+        assertEquals("Quick settings",quickPanel.label);
+        assertEquals("Open Android quick-settings panel",quickPanel.description);
+        assertEquals("Tools",quickPanel.group);
+        assertEquals("action",quickPanel.kind);
+        assertFalse(quickPanel.defaultShown);
+        assertTrue(ControlCatalog.defaultHidden().contains("quick_panel"));
+        assertFalse(PortableDefaults.ORDER.contains("quick_panel"));
         assertTrue("Existing catalog defaults remain stable for saved-layout migrations",ControlCatalog.defaultHidden().contains("screenshot"));
         assertFalse(ControlCatalog.defaultHidden().contains("fan"));
     }

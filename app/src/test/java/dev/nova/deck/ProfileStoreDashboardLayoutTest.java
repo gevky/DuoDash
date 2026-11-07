@@ -7,6 +7,7 @@ import org.junit.Test;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import static org.junit.Assert.*;
@@ -99,7 +100,7 @@ public class ProfileStoreDashboardLayoutTest {
     private static void assertSavedLayout(UiState state,String expectedKey){
         assertEquals(expectedKey,state.layoutKey);
         assertEquals(ControlLogic.cleanOrder("wifi,bluetooth,apps,volume,clear_recents"),state.controlOrder);
-        assertEquals("fan",state.hiddenControls);
+        assertEquals("fan,quick_panel",state.hiddenControls);
         assertEquals("bluetooth",state.wideControls);
         assertEquals("wifi",state.smallControls);
         assertEquals("apps:6",state.controlSizes);
@@ -167,10 +168,27 @@ public class ProfileStoreDashboardLayoutTest {
         UiState offline=new UiState();
         store.loadDashboardLayout("handheld",offline,"main");
         assertEquals(ControlLogic.cleanOrder("wifi,bluetooth,volume"),offline.controlOrder);
-        assertEquals("fan,apps",offline.hiddenControls);
+        assertEquals("fan,apps,quick_panel",offline.hiddenControls);
         assertEquals("37",fixture.values.get("output:tv-identity:main").toString());
         assertEquals("82",fixture.values.get("handheld:main").toString());
         assertEquals("output:tv-identity",fixture.values.get(SharedDashboardLayout.SOURCE_KEY));
+    }
+
+    @Test public void versionEightMigrationHidesNewPanelAndKeepsLaterUserChoice(){
+        PreferencesFixture fixture=new PreferencesFixture();
+        putLegacyLayout(fixture,"handheld","wifi,apps","volume");
+        ProfileStore store=new ProfileStore(fixture);
+
+        String migratedOrder=store.order("handheld");
+        assertTrue(Arrays.asList(migratedOrder.split(",")).contains("quick_panel"));
+        assertTrue(Arrays.asList(store.hidden("handheld").split(",")).contains("quick_panel"));
+        assertEquals(8,fixture.values.get("handheld:layoutVersion"));
+
+        store.layout("handheld",migratedOrder,"volume");
+        ProfileStore reloaded=new ProfileStore(fixture);
+        assertTrue(Arrays.asList(reloaded.order("handheld").split(",")).contains("quick_panel"));
+        assertFalse(Arrays.asList(reloaded.hidden("handheld").split(",")).contains("quick_panel"));
+        assertEquals(8,fixture.values.get("handheld:layoutVersion"));
     }
 
     private static Map<String,String> stringValues(Map<String,Object> values){

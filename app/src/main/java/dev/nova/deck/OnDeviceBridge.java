@@ -63,13 +63,11 @@ final class OnDeviceBridge {
 
     static String reconnectAndStart(Context context)throws Exception{
         if(!isPaired(context))throw new IllegalStateException("Pair DuoDash once in Wireless debugging first.");
-        String healthy=healthyHelperMessage(context);if(healthy!=null)return healthy;
         return connectAndStart(context,OnDeviceAdb.get(context),false);
     }
 
     static String reconnectAfterBoot(Context context)throws Exception{
         if(!isPaired(context))throw new IllegalStateException("Pair DuoDash once in Wireless debugging first.");
-        String healthy=healthyHelperMessage(context);if(healthy!=null)return healthy;
         return connectAndStart(context,OnDeviceAdb.get(context),true);
     }
 
@@ -85,7 +83,11 @@ final class OnDeviceBridge {
     }
 
     private static String connectAndStart(Context context,OnDeviceAdb adb,boolean bootRecovery)throws Exception{
-        String healthy=healthyHelperMessage(context);if(healthy!=null)return healthy;
+        String healthy=healthyHelperMessage(context);
+        if(healthy!=null&&(UsbDebugging.isEnabled(context)||context.checkSelfPermission(android.Manifest.permission.WRITE_SECURE_SETTINGS)==android.content.pm.PackageManager.PERMISSION_GRANTED)){
+            UsbDebugging.ensureEnabled(context);
+            return healthy;
+        }
         android.content.ContentResolver resolver=context.getContentResolver();
         int originalDebugging=android.provider.Settings.Global.getInt(resolver,"adb_wifi_enabled",0);
         boolean canWrite=context.checkSelfPermission(android.Manifest.permission.WRITE_SECURE_SETTINGS)==android.content.pm.PackageManager.PERMISSION_GRANTED;
@@ -119,11 +121,11 @@ final class OnDeviceBridge {
     }
 
     private static String connectAndStartOverAdb(Context context,OnDeviceAdb adb,boolean bootRecovery)throws Exception{
-        String healthy=healthyHelperMessage(context);if(healthy!=null)return healthy;
         String existingToken=readExistingToken(context);
         adb.setTimeout(bootRecovery?3:10,TimeUnit.SECONDS);
         grantPersistentSettingsPermission(context,adb,bootRecovery);
-        healthy=healthyHelperMessage(context);if(healthy!=null)return healthy;
+        UsbDebugging.ensureEnabled(context);
+        String healthy=healthyHelperMessage(context);if(healthy!=null)return healthy;
             // Some Android builds keep the TLS listener alive while omitting its mDNS
             // record. Prefer its fixed loopback-only port; never scan the LAN.
             int localPort=localTlsPort();boolean connected=localPort>0&&adb.connect("127.0.0.1",localPort);
