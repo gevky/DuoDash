@@ -10,7 +10,7 @@ import java.nio.file.Files;
 
 public final class BridgeClient {
     public static final String SOCKET="dev.nova.deck.control.v1";
-    public static final int EXPECTED_BRIDGE_BUILD=49;
+    public static final int EXPECTED_BRIDGE_BUILD=51;
     public static final String EXPECTED_SWAP_STRATEGY="coordinated-roottask-v3-no-placeholder";
     private final Context context;
     public BridgeClient(Context context) { this.context=context; }

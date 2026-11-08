@@ -30,8 +30,8 @@ import java.util.Set;
 final class SettingsPageView extends FrameLayout {
     private static final int BASE=0xff101012, RAIL=0xff17171a, SELECTED=0xff29272d;
     private static final int TEXT=0xfff1eff4, MUTED=0xffb8b4be, ACCENT=0xffd2c6df;
-    private static final String[] CATEGORIES={"output","dashboard","connection"};
-    private static final String[] LABELS={"Display","Dashboard","Connection"};
+    private static final String[] CATEGORIES={"output","dashboard","shortcuts","connection"};
+    private static final String[] LABELS={"Display","Dashboard","Shortcuts","Connection"};
 
     private final OverlayService host;
     private final LinearLayout rail,content;
@@ -42,7 +42,7 @@ final class SettingsPageView extends FrameLayout {
     private String category;
 
     SettingsPageView(Context context,OverlayService host,String initialCategory){
-        super(context);this.host=host;category="controller".equals(initialCategory)?"dashboard":validCategory(initialCategory)?initialCategory:"output";
+        super(context);this.host=host;category="controller".equals(initialCategory)?"shortcuts":validCategory(initialCategory)?initialCategory:"output";
         setBackgroundColor(BASE);setClickable(true);setFocusable(true);setFocusableInTouchMode(true);setDescendantFocusability(ViewGroup.FOCUS_AFTER_DESCENDANTS);
 
         LinearLayout page=new LinearLayout(context);page.setOrientation(LinearLayout.VERTICAL);addView(page,new FrameLayout.LayoutParams(-1,-1));

@@ -6,8 +6,8 @@ android {
         applicationId 'dev.nova.deck'
         minSdk 33
         targetSdk 33
-        versionCode 85
-        versionName '0.1.0-beta.2'
+        versionCode 87
+        versionName '0.1.0-beta.4'
         testInstrumentationRunner 'dev.nova.deck.DeviceChecks'
     }
     compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }

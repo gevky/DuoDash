@@ -170,7 +170,7 @@ final class SetupWizardView extends LinearLayout {
         boolean configured=status!=null&&status.shortcutConfigured&&!saved.isEmpty();
         if(configured){
             String first=saved.split(";")[0];
-            row("Dashboard shortcut",ShortcutDialogs.label(first),"Ready",true,null,null);
+            row("Dashboard shortcut",ShortcutLabels.label(first),"Ready",true,null,null);
             if(saved.split(";").length>1){TextView extra=text("+"+(saved.split(";").length-1)+" more saved",12,MUTED,false);extra.setPadding(dp(12),dp(4),0,0);statusRows.addView(extra,new LayoutParams(-1,-2));}
         }else row("Dashboard shortcut","One valid button or combination is required before setup can finish.","Needed",false,null,null);
 
@@ -179,7 +179,7 @@ final class SetupWizardView extends LinearLayout {
             capture.setLineSpacing(dp(2),1f);capture.setPadding(dp(4),dp(8),dp(4),dp(4));statusRows.addView(capture,new LayoutParams(-1,-2));
             boolean candidateReady=heldShortcutKeys.isEmpty()&&!candidateShortcutKeys.isEmpty()&&candidateShortcutKeys.size()<=3;
             boolean hasCandidate=!candidateShortcutKeys.isEmpty();
-            String label=hasCandidate?ShortcutDialogs.label(joinKeys(candidateShortcutKeys)):"";
+            String label=hasCandidate?ShortcutLabels.label(joinKeys(candidateShortcutKeys)):"";
             String candidateText=!hasCandidate?"Press a button":candidateShortcutKeys.size()>3?"Use no more than three buttons":!heldShortcutKeys.isEmpty()?"Holding: "+label:"Captured: "+label;
             TextView candidate=text(candidateText,14,TEXT,true);candidate.setPadding(dp(4),dp(2),0,dp(4));statusRows.addView(candidate,new LayoutParams(-1,-2));
             Button recordOrSave=button(hasCandidate&&candidateShortcutKeys.size()<=3?"Save shortcut":"Cancel recording",hasCandidate&&candidateShortcutKeys.size()<=3);

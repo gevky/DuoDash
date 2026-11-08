@@ -40,8 +40,9 @@ In **Edit**, hold and drag to move controls. Tap a control button's left side to
 
 ## Settings
 
-- **Dashboard:** shortcut, slider direction, floating button and status indicators. **Touch only** disables controller navigation; otherwise use D-pad, A and B.
+- **Dashboard:** slider direction, floating button and status indicators. **Touch only** disables controller navigation; otherwise use D-pad, A and B.
 - **Display:** profile name, resolution, aspect ratio and where DuoDash opens. Choose **Use external screen** for one Android session on your TV or glasses, or **Use both screens** for separate apps.
+- **Shortcuts:** record the DuoDash shortcut and button combinations for controls. Tap an assigned combination to change it or remove it with ×. If a shortcut is part of a longer combination, it runs on release; the longer combination takes priority.
 - **Connection:** restore system controls, manage permissions and hide the background notification.
 
 Each display remembers its brightness, audio and handheld screen-off setting too. The control layout stays shared. In external-screen mode, the handheld follows the selected aspect ratio and may show black borders.

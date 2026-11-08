@@ -52,6 +52,7 @@ public final class DeckController implements DashboardActions, DisplayManager.Di
     private long lastSample;
     private Runnable mainChange,upperChange;
     private String configuredShortcuts;
+    private String pendingShortcuts;
     private String canvasApplySignature="";
     private String dockedCanvasApplySignature="";
     private UiState.ResolutionPreview pendingResolution;
@@ -126,7 +127,8 @@ public final class DeckController implements DashboardActions, DisplayManager.Di
         state.feedback=state.profile.equals("New output")?"Settings saved":"Saved for "+state.profile;
     }
     private JSONObject target() throws JSONException { return new JSONObject().put("display",externalId).put("identity",identity); }
-    private void request(String command,JSONObject arguments,boolean action) {
+    private void request(String command,JSONObject arguments,boolean action) { request(command,arguments,action,null,null); }
+    private void request(String command,JSONObject arguments,boolean action,Runnable succeeded,Runnable failed) {
         if(!running)return;
         final String requestProfile=profileKey;
         if(action) {state.busy=true;render();}
@@ -135,6 +137,7 @@ public final class DeckController implements DashboardActions, DisplayManager.Di
                 JSONObject result=bridge.request(command,arguments);
                 main.post(()->{
                     if(!running)return;
+                    if(succeeded!=null)succeeded.run();
                     if(command.equals("setting")&&arguments!=null&&arguments.optString("id").equals("refresh_mode"))profiles.refresh(requestProfile,arguments.optInt("value"));
                     if(action) { state.busy=false;state.feedback=result.optString("message","");android.util.Log.i("NovaDeck","Control completed: "+command); }
                     render();
@@ -143,6 +146,7 @@ public final class DeckController implements DashboardActions, DisplayManager.Di
             } catch(Exception error) {
                 main.post(()->{
                     if(!running)return;
+                    if(failed!=null)failed.run();
                     if(command.equals("canvas_apply"))canvasApplySignature="";
                     if(command.equals("dock_canvas"))dockedCanvasApplySignature="";
                     if(action)state.busy=false;
@@ -172,7 +176,7 @@ public final class DeckController implements DashboardActions, DisplayManager.Di
                     state.connection="System controls need reconnecting";
                     canvasApplySignature="";
                     state.panelPowerSupported=false;panelPowerApplied=false;
-                    configuredShortcuts=null;if(DeckAccessibilityService.connected!=null)DeckAccessibilityService.connected.nativeGamepad=false;
+                    configuredShortcuts=null;pendingShortcuts=null;if(DeckAccessibilityService.connected!=null)DeckAccessibilityService.connected.nativeGamepad=false;
                     context.sendBroadcast(new Intent(MirrorActivity.CLOSE).setPackage(context.getPackageName()));
                     state.externalConnected=Arrays.stream(displays.getDisplays()).anyMatch(d->d.getDisplayId()!=0);
                 }
@@ -632,9 +636,13 @@ public final class DeckController implements DashboardActions, DisplayManager.Di
         requestPanelPower("wake",false,true);
     }
     public void configureShortcuts(){
-        if(!state.bridgeReady)return;String keys=context.getSharedPreferences("ui",0).getString("shortcuts","");
-        if(keys.equals(configuredShortcuts))return;configuredShortcuts=keys;
-        try{request("shortcuts",new JSONObject().put("keys",keys),false);}catch(Exception ignored){}
+        if(!state.bridgeReady)return;android.content.SharedPreferences prefs=context.getSharedPreferences("ui",Context.MODE_PRIVATE);
+        String keys=prefs.getString("shortcuts",""),controls=prefs.getString(ShortcutBindings.PREF,"");String signature=keys+"\u0000"+controls;
+        if(signature.equals(configuredShortcuts)||signature.equals(pendingShortcuts))return;pendingShortcuts=signature;
+        try{request("shortcuts",new JSONObject().put("keys",keys).put("controls",controls),false,
+            ()->{if(signature.equals(pendingShortcuts)){configuredShortcuts=signature;pendingShortcuts=null;}},
+            ()->{if(signature.equals(pendingShortcuts))pendingShortcuts=null;});}
+        catch(Exception ignored){if(signature.equals(pendingShortcuts))pendingShortcuts=null;}
     }
     public void recordGamepad(boolean enabled){if(!state.bridgeReady)return;try{request("recording",new JSONObject().put("enabled",enabled),false);}catch(Exception ignored){}}
     public void nativeMode(String id,int value){if(!state.bridgeReady){host.message("Reconnect system controls first");return;}try{request("setting",new JSONObject().put("id",id).put("value",value),true);}catch(Exception ignored){}}
@@ -672,6 +680,14 @@ public final class DeckController implements DashboardActions, DisplayManager.Di
         updateLayout(key,state.controlOrder,String.join(",",hidden));
     }
     private void removePinnedApp(String key,String id){
+        android.content.SharedPreferences ui=context.getSharedPreferences("ui",Context.MODE_PRIVATE);
+        ShortcutBindings shortcutBindings=new ShortcutBindings(ui.getString("shortcuts",""),ui.getString(ShortcutBindings.PREF,""));
+        String appChord=shortcutBindings.shortcuts(id);
+        if(!appChord.isEmpty()){
+            ui.edit().putString(ShortcutBindings.PREF,shortcutBindings.remove(id,appChord)).apply();
+            if(DeckAccessibilityService.connected!=null)DeckAccessibilityService.connected.reloadShortcuts();
+            configureShortcuts();
+        }
         List<String> appIds=new ArrayList<>();for(UiState.AppShortcut app:state.pinnedApps)appIds.add(app.id);
         ControlLogic.AppControlState cleaned=ControlLogic.cleanAppControls(state.controlOrder,state.hiddenControls,state.wideControls,appIds,id);
         Set<String> keep=new LinkedHashSet<>(cleaned.pinnedAppIds);state.pinnedApps.removeIf(app->!keep.remove(app.id));

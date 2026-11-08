@@ -30,7 +30,7 @@ public final class DeckAccessibilityService extends AccessibilityService {
     int navigationEvents;
     private final java.util.Set<Integer> dashboardKeys=new java.util.HashSet<>();
     private ShortcutMatcher shortcuts=new ShortcutMatcher("");
-    void reloadShortcuts(){shortcuts=new ShortcutMatcher(getSharedPreferences("ui",MODE_PRIVATE).getString("shortcuts",""));}
+    void reloadShortcuts(){android.content.SharedPreferences prefs=getSharedPreferences("ui",MODE_PRIVATE);shortcuts=new ShortcutMatcher(prefs.getString("shortcuts",""),prefs.getString(ShortcutBindings.PREF,""));}
     static boolean beginWizardRecording(MainActivity activity,Recorder callback){
         DeckAccessibilityService service=connected;
         if(service==null||activity==null||callback==null||!activity.isSetupRecordingForeground())return false;
@@ -147,13 +147,13 @@ public final class DeckAccessibilityService extends AccessibilityService {
         // The native monitor owns internal-controller shortcuts. Other controllers
         // must match their configured shortcut before A/B or D-pad navigation.
         if(!nativeSource){
-            ShortcutMatcher.Result result=shortcuts.event(code,event.getAction()==KeyEvent.ACTION_DOWN,event.getRepeatCount()>0);
-            if(result.toggle){
-                android.util.Log.i("NovaDeck","Dashboard shortcut event uptime="+android.os.SystemClock.uptimeMillis()+" source=accessibility");
-                startForegroundService(new android.content.Intent(this,OverlayService.class).setAction(OverlayService.TOGGLE)
-                    .putExtra("shortcut",true).putExtra("shortcut_source","accessibility"));
+            OverlayService overlayForCapture=OverlayService.current;
+            boolean editingWithoutRecorder=recorder==null&&overlayForCapture!=null&&overlayForCapture.inlineShortcutEditor!=null&&overlayForCapture.inlineShortcutEditor.isRecording();
+            if(!editingWithoutRecorder){
+                ShortcutMatcher.Result result=shortcuts.event(code,event.getAction()==KeyEvent.ACTION_DOWN,event.getRepeatCount()>0);
+                if(result.action!=null)OverlayService.dispatchShortcut(this,result.action,"accessibility");
+                if(result.consume){if(event.getAction()==KeyEvent.ACTION_UP)dashboardKeys.remove(code);return true;}
             }
-            if(result.consume){if(event.getAction()==KeyEvent.ACTION_UP)dashboardKeys.remove(code);return true;}
         }
         OverlayService overlay=OverlayService.current;
         if(event.getAction()==KeyEvent.ACTION_UP&&dashboardKeys.remove(code)){

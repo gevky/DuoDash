@@ -44,6 +44,10 @@ final class ShellDevice {
         try{run("am","broadcast","--receiver-foreground","-a","dev.nova.deck.GAMEPAD_EVENT","-n","dev.nova.deck/.GamepadShortcutReceiver","--es","token",token,"--ei","key",Integer.toString(key),"--ei","action",Integer.toString(action),"--ez","toggle",Boolean.toString(toggle));}
         catch(Exception failure){android.util.Log.w("NovaDeckBridge","Controller notification failed: "+failure.getClass().getSimpleName());}
     }
+    void sendShortcut(String token,int key,String action){
+        try{run("am","broadcast","--receiver-foreground","-a","dev.nova.deck.GAMEPAD_EVENT","-n","dev.nova.deck/.GamepadShortcutReceiver","--es","token",token,"--ei","key",Integer.toString(key),"--ei","action",Integer.toString(android.view.KeyEvent.ACTION_DOWN),"--es","shortcut_action",action);}
+        catch(Exception failure){android.util.Log.w("NovaDeckBridge","Controller shortcut notification failed: "+failure.getClass().getSimpleName());}
+    }
     private void snapshot()throws Exception{
         if(sampled!=0&&SystemClock.elapsedRealtime()-sampled<2500)return;
         load(system,run("settings","list","system"),Set.of(CONTROLLER_MOUSE,"fan_mode","performance_mode","fan_speed","accelerometer_rotation","is_charging_separation","temp_abxy_layout_mode","flip_button_layout","no_create_gamepad_button_layout","trigger_input_mode",LED_BRIGHTNESS,"percent_80_charge_limit","charging_limit_power_limit","peak_refresh_rate",CLOSE_SCREEN_WHEN_OUTPUT_VIDEO));

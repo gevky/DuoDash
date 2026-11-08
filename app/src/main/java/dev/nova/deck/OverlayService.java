@@ -28,6 +28,7 @@ public final class OverlayService extends Service implements DeckController.Host
     private static final String EXTRA_SETTINGS_MEDIA_OUTPUT_PACKAGE="com.android.settings.panel.extra.PACKAGE_NAME";
     private static final String PACKAGE_SYSTEM_UI="com.android.systemui";
     public static final String SHOW="dev.nova.deck.SHOW", RESET="dev.nova.deck.RESET", STOP="dev.nova.deck.STOP";
+    public static final String RUN_SHORTCUT="dev.nova.deck.RUN_SHORTCUT";
     public static final String TOGGLE="dev.nova.deck.TOGGLE";
     private static final String STOP_RECORDING="dev.nova.deck.STOP_RECORDING";
     private WindowManager windows;
@@ -43,6 +44,10 @@ public final class OverlayService extends Service implements DeckController.Host
     private FrameLayout panelRoot;
     private SettingsPageView settingsPage;
     InlineShortcutEditor inlineShortcutEditor;
+    private ShortcutSettingsView shortcutSettings;
+    private final ArrayDeque<String> pendingControlShortcuts=new ArrayDeque<>();
+    private long shortcutReadyDeadline;
+    private final Runnable dispatchPendingShortcuts=this::drainControlShortcuts;
     private String settingsCategory="output";
     private View mainBlank;
     private HandleView handle;
@@ -355,7 +360,7 @@ public final class OverlayService extends Service implements DeckController.Host
     @Override public void closePanel() {
         if(controller!=null&&dashboardControllerInput)controller.controllerFocus(false);
         dashboardControllerInput=false;
-        if(settingsPage!=null){if(inlineShortcutEditor!=null){inlineShortcutEditor.dispose();inlineShortcutEditor=null;}settingsPage=null;settingsOpen=false;}
+        if(settingsPage!=null){disposeShortcutEditors();settingsPage=null;settingsOpen=false;}
         if(panel!=null)panel.enableControllerNavigation(false);
         if(panelRoot!=null)panelRoot.setOnApplyWindowInsetsListener(null);
         if(panelRoot!=null){try{(panelWindows==null?windows:panelWindows).removeView(panelRoot);}catch(IllegalArgumentException ignored){}panelRoot=null;}
@@ -395,9 +400,9 @@ public final class OverlayService extends Service implements DeckController.Host
         if(!settingsReadinessKnown||settingsLastBridge!=state.bridgeReady||settingsLastAccessibilityEnabled!=enabled||settingsLastAccessibilityBound!=bound||settingsLastUsbDebugging!=usb){
             settingsReadinessKnown=true;settingsLastBridge=state.bridgeReady;settingsLastAccessibilityEnabled=enabled;settingsLastAccessibilityBound=bound;settingsLastUsbDebugging=usb;settingsRefreshPending=true;
         }
-        if(settingsRefreshPending&&("connection".equals(settingsPage.category())||"dashboard".equals(settingsPage.category()))&&(inlineShortcutEditor==null||!inlineShortcutEditor.isRecording())){
+        if(settingsRefreshPending&&("connection".equals(settingsPage.category())||"shortcuts".equals(settingsPage.category()))&&(inlineShortcutEditor==null||!inlineShortcutEditor.isRecording())){
             settingsRefreshPending=false;
-            if("dashboard".equals(settingsPage.category())&&inlineShortcutEditor!=null){inlineShortcutEditor.dispose();inlineShortcutEditor=null;}
+            if("shortcuts".equals(settingsPage.category()))disposeShortcutEditors();
             settingsPage.refreshCurrent();
         }
     }
@@ -493,15 +498,15 @@ public final class OverlayService extends Service implements DeckController.Host
             localScreenOnly(settingsPage,!controller.includePanelInMirror());
             updatePanelPresentation();settingsPage.animateIn();settingsPage.requestFocus();rememberSettingsReadiness();
         }else{
-            if("dashboard".equals(settingsPage.category())&&inlineShortcutEditor!=null&&inlineShortcutEditor.isRecording())return;
-            if("dashboard".equals(settingsPage.category())&&inlineShortcutEditor!=null){inlineShortcutEditor.dispose();inlineShortcutEditor=null;}
+            if("shortcuts".equals(settingsPage.category())&&inlineShortcutEditor!=null&&inlineShortcutEditor.isRecording())return;
+            if("shortcuts".equals(settingsPage.category()))disposeShortcutEditors();
             settingsPage.refreshCurrent();
         }
     }
     void exitSettingsPage(){
         if(settingsPage==null)return;
         SettingsPageView leaving=settingsPage;settingsCategory=leaving.category();
-        if(inlineShortcutEditor!=null){inlineShortcutEditor.dispose();inlineShortcutEditor=null;}
+        disposeShortcutEditors();
         leaving.animateOut(()->{
             if(settingsPage!=leaving)return;
             if(panelRoot!=null)panelRoot.removeView(leaving);settingsPage=null;settingsOpen=false;
@@ -512,7 +517,7 @@ public final class OverlayService extends Service implements DeckController.Host
     void settingsCategoryChanged(String previous,String next){
         settingsCategory=next;
         settingsRefreshPending=false;
-        if("dashboard".equals(previous)&&!"dashboard".equals(next)&&inlineShortcutEditor!=null){inlineShortcutEditor.dispose();inlineShortcutEditor=null;}
+        if("shortcuts".equals(previous)&&!"shortcuts".equals(next))disposeShortcutEditors();
     }
     @Override public void openConnectionSettings(){
         settingsCategory="connection";
@@ -598,7 +603,7 @@ public final class OverlayService extends Service implements DeckController.Host
     private static String nonempty(String value,String fallback){return value==null||value.trim().isEmpty()?fallback:value;}
     void populateSettingsCategory(String category,LinearLayout content){
         if(controller==null)return;
-        switch(category){case "output":buildOutputSettings(content);break;case "dashboard":buildDashboardSettings(content);break;case "connection":buildConnectionSettings(content);break;}
+        switch(category){case "output":buildOutputSettings(content);break;case "dashboard":buildDashboardSettings(content);break;case "connection":buildConnectionSettings(content);break;case "shortcuts":disposeShortcutEditors();shortcutSettings=new ShortcutSettingsView(content.getContext(),this,controller);content.addView(shortcutSettings,new LinearLayout.LayoutParams(-1,-2));break;}
     }
     private TextView sectionLabel(LinearLayout parent,String text){
         TextView label=new TextView(parent.getContext());label.setText(text);label.setTextSize(14);label.setTypeface(android.graphics.Typeface.create("sans-serif-medium",android.graphics.Typeface.NORMAL));label.setTextColor(0xffd2c6df);label.setPadding(0,dp(14),0,dp(5));parent.addView(label,new LinearLayout.LayoutParams(-1,dp(42)));return label;
@@ -633,7 +638,6 @@ public final class OverlayService extends Service implements DeckController.Host
         }
     }
     private void buildDashboardSettings(LinearLayout content){
-        sectionLabel(content,"Shortcut");inlineShortcutEditor=new InlineShortcutEditor(content.getContext(),this,controller);content.addView(inlineShortcutEditor,new LinearLayout.LayoutParams(-1,-2));
         settingSwitch(content,"Touch only",touchOnlyEnabled(),enabled->{getSharedPreferences("ui",MODE_PRIVATE).edit().putBoolean("touchOnly",enabled).apply();applyTouchOnlyMode(enabled);});
         sectionLabel(content,"Layout");
         String layout=controller.layoutKey();settingSwitch(content,"Horizontal sliders",controller.state.horizontalSliders,v->controller.style(layout,v,controller.state.compactControls));settingSwitch(content,"Floating launch button",floatingEnabled(),v->{getSharedPreferences("ui",MODE_PRIVATE).edit().putBoolean("floatingButton",v).apply();if(!v&&handle!=null){mainWindows.removeView(handle);handle=null;}else if(v&&handle==null)addHandle();});
@@ -835,6 +839,7 @@ public final class OverlayService extends Service implements DeckController.Host
             if(current!=this)return;
             String next=pendingEntryAction;pendingEntryAction=null;
             if(SetupReadiness.shouldRouteToSetup(status)){
+                if(RUN_SHORTCUT.equals(next))pendingControlShortcuts.clear();
                 if("background_rebind".equals(next)){
                     // Wait quietly for accessibility to finish rebinding; never open a
                     // setup Activity from Android's sticky background-service restart.
@@ -847,6 +852,7 @@ public final class OverlayService extends Service implements DeckController.Host
             dashboardReady=true;
             try{ensureDashboard();}catch(Exception error){routeToSetup();return;}
             if("background_rebind".equals(next)){backgroundRebindPending=false;resolutionUiHandler.removeCallbacks(stopBackgroundRebind);return;}
+            if(RUN_SHORTCUT.equals(next)){resolutionUiHandler.removeCallbacks(dispatchPendingShortcuts);resolutionUiHandler.post(dispatchPendingShortcuts);return;}
             if(RESET.equals(next)){restoreMainScreen();controller.restore();}
             else if(STOP_RECORDING.equals(next))controller.stopScreenRecording();
             else if("settings".equals(next)){if(!panelShowing)showPanel();showSetup();}
@@ -854,10 +860,39 @@ public final class OverlayService extends Service implements DeckController.Host
             else if(SHOW.equals(next)){restoreMainScreen();showPanel();}
         });
     }
+    public static void dispatchShortcut(Context context,String action,String source){
+        OverlayService overlay=current;
+        if(overlay!=null&&overlay.inlineShortcutEditor!=null&&overlay.inlineShortcutEditor.isRecording())return;
+        if(!SetupReadiness.hasCompletedSetup(context))return;
+        Intent intent=new Intent(context,OverlayService.class).putExtra("shortcut_source",source);
+        if(ShortcutBindings.TOGGLE.equals(action))intent.setAction(TOGGLE).putExtra("shortcut",true);
+        else intent.setAction(RUN_SHORTCUT).putExtra("control",action);
+        context.startForegroundService(intent);
+    }
+    private void drainControlShortcuts(){
+        if(current!=this||controller==null||pendingControlShortcuts.isEmpty())return;
+        if(!controller.state.bridgeReady&&SystemClock.uptimeMillis()<shortcutReadyDeadline){resolutionUiHandler.postDelayed(dispatchPendingShortcuts,80);return;}
+        while(!pendingControlShortcuts.isEmpty()){
+            String action=pendingControlShortcuts.removeFirst();
+            ShortcutBindings saved=new ShortcutBindings(getSharedPreferences("ui",0).getString("shortcuts",""),getSharedPreferences("ui",0).getString(ShortcutBindings.PREF,""));
+            if(saved.shortcuts(action).isEmpty()||!ShortcutActions.valid(action,controller.state))continue;
+            if(ShortcutActions.requiresExternal(action)&&!controller.state.externalConnected)continue;
+            ShortcutActions.perform(controller,controller.state,action);
+        }
+    }
+    private void openShortcutsPage(){
+        settingsCategory="shortcuts";
+        if(settingsPage!=null){settingsPage.selectCategory("shortcuts");return;}
+        showSetup();
+    }
+    private void disposeShortcutEditors(){
+        if(shortcutSettings!=null){shortcutSettings.dispose();shortcutSettings=null;}
+        if(inlineShortcutEditor!=null){inlineShortcutEditor.dispose();inlineShortcutEditor=null;}
+    }
     @Override public void performControl(String id){
         switch(id){
             case "black_main":if(mainBlank!=null)restoreMainScreen();else blackMainScreen();return;
-            case "shortcuts":ShortcutDialogs.show(this);return;
+            case "shortcuts":openShortcutsPage();return;
             case "apps":chooseApp(false);return;
             case "keyboard":controller.wakeHandheldForActivity("");dismissForLaunch();((InputMethodManager)getSystemService(INPUT_METHOD_SERVICE)).showInputMethodPicker();return;
             case "screenshot":
@@ -972,7 +1007,7 @@ public final class OverlayService extends Service implements DeckController.Host
     }
     private void clearRecording(){if(DeckAccessibilityService.connected!=null)DeckAccessibilityService.connected.recorder=null;if(controller!=null)controller.recordGamepad(false);}
     void recordGamepad(boolean enabled){controller.recordGamepad(enabled);}
-    void shortcutsChanged(){controller.configureShortcuts();}
+    void shortcutsChanged(){if(DeckAccessibilityService.connected!=null)DeckAccessibilityService.connected.reloadShortcuts();controller.configureShortcuts();}
     private void blackMainScreen(){
         if(mainBlank!=null)return;
         View blank=new GuardedView(mainUiContext,false,"main-screen-shield");blank.setBackgroundColor(Color.BLACK);blank.setContentDescription("Main screen black. Tap to restore.");
@@ -1027,6 +1062,14 @@ public final class OverlayService extends Service implements DeckController.Host
     @Override public int onStartCommand(Intent intent,int flags,int id) {
         String action=intent==null?"":intent.getAction();
         if(STOP.equals(action)){stopSelf();return START_NOT_STICKY;}
+        if(RUN_SHORTCUT.equals(action)){
+            String control=intent.getStringExtra("control");
+            if(control!=null&&!new ShortcutBindings(getSharedPreferences("ui",0).getString("shortcuts",""),getSharedPreferences("ui",0).getString(ShortcutBindings.PREF,"")).shortcuts(control).isEmpty()){
+                if(pendingControlShortcuts.size()<16)pendingControlShortcuts.add(control);
+                shortcutReadyDeadline=SystemClock.uptimeMillis()+3000;requestReadyEntry(RUN_SHORTCUT);
+            }
+            return START_STICKY;
+        }
         if(action.isEmpty()){
             SetupReadiness.Status local=SetupReadiness.inspect(this,false);
             if(!local.canReconnectInBackground()){stopForeground(true);stopSelf(id);return START_NOT_STICKY;}
@@ -1072,6 +1115,7 @@ public final class OverlayService extends Service implements DeckController.Host
         else if(panelShowing)closePanel();else showPanel();
     }
     @Override public void onDestroy() {
+        resolutionUiHandler.removeCallbacks(dispatchPendingShortcuts);pendingControlShortcuts.clear();
         current=null;
         resolutionUiHandler.removeCallbacks(stopBackgroundRebind);
         if(screenshotCapture!=null){screenshotCapture.cancel();screenshotCapture=null;}

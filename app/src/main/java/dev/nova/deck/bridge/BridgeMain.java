@@ -155,7 +155,7 @@ public final class BridgeMain {
             case "clear_recents":return clearRecentTasks();
             case "setting":device.mode(request.getString("id"),request.getInt("value"));return new JSONObject().put("message","Native setting updated");
             case "panel_power":return panelPower(request);
-            case "shortcuts":gamepad.configure(dev.nova.deck.ShortcutMatcher.normalize(request.optString("keys")));return new JSONObject();
+            case "shortcuts":gamepad.configure(dev.nova.deck.ShortcutMatcher.normalize(request.optString("keys")),dev.nova.deck.ShortcutBindings.normalizeControls(request.optString("controls")));return new JSONObject();
             case "recording":gamepad.record(request.getBoolean("enabled"));return new JSONObject();
             case "swap": case "up": case "down": {
                 Object info=external(request);

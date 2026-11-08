@@ -13,8 +13,8 @@ final class GamepadMonitor {
     private ShortcutMatcher matcher=new ShortcutMatcher("");
     private final Map<Integer,Integer> layout=new HashMap<>();
     GamepadMonitor(ShellDevice device,String token){this.device=device;this.token=token;Thread thread=new Thread(this::listen,"nova-gamepad");thread.setDaemon(true);thread.start();}
-    synchronized void configure(String keys){matcher=new ShortcutMatcher(keys);}
-    void record(boolean value){recording=value;}
+    synchronized void configure(String keys,String controls){matcher=new ShortcutMatcher(keys,controls);}
+    void record(boolean value){synchronized(this){if(recording!=value)matcher.reset();recording=value;}}
     boolean available(){return available;}
     private void listen(){
         try{
@@ -25,9 +25,10 @@ final class GamepadMonitor {
             available=true;
             try(BufferedReader input=new BufferedReader(new InputStreamReader(process.getInputStream(),StandardCharsets.UTF_8))){
                 for(String line;running&&(line=input.readLine())!=null;){ControllerKeyParser.Key key=ControllerKeyParser.parse(line,layout);if(key==null||key.code==KeyEvent.KEYCODE_HOME||key.code==KeyEvent.KEYCODE_POWER)continue;
-                    if(recording){device.sendGamepad(token,key.code,key.down?KeyEvent.ACTION_DOWN:KeyEvent.ACTION_UP,false);continue;}
-                    boolean toggle; synchronized(this){toggle=matcher.event(key.code,key.down,key.repeat).toggle;}
-                    if(toggle)device.sendGamepad(token,key.code,KeyEvent.ACTION_DOWN,true);
+                    boolean capture;ShortcutMatcher.Result matched=null;
+                    synchronized(this){capture=recording;if(capture)matcher.reset();else matched=matcher.event(key.code,key.down,key.repeat);}
+                    if(capture){device.sendGamepad(token,key.code,key.down?KeyEvent.ACTION_DOWN:KeyEvent.ACTION_UP,false);continue;}
+                    if(matched.action!=null)device.sendShortcut(token,key.code,matched.action);
                 }
             }
         }catch(Exception failure){android.util.Log.w("NovaDeckBridge","Internal gamepad listener unavailable: "+failure.getClass().getSimpleName());}

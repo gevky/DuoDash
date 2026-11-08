@@ -1141,6 +1141,105 @@ public final class DeviceChecks extends Instrumentation {
         }catch(Exception e){throw new RuntimeException(e);}});
         require(saved.equals(getTargetContext().getSharedPreferences("display_profiles",0).getAll()),"Rendering changed profile preferences");
     }
+    private void checkControlShortcuts(UiAutomation automation)throws Exception{
+        Context context=getTargetContext();require(SetupReadiness.hasCompletedSetup(context),"Complete DuoDash setup before testing shortcuts");
+        rebindEnabledAccessibilityService(automation);OnDeviceBridge.reconnectAndStart(context);
+        context.startForegroundService(new Intent(context,OverlayService.class).setAction(OverlayService.SHOW));
+        waitFor(()->{ui(()->{service=OverlayService.current;if(service!=null)try{controller=(DeckController)field(service,"controller");}catch(Exception e){throw new RuntimeException(e);}});return controller!=null;},"Overlay service missing");
+        waitFor(()->controller.state.bridgeReady,"System helper unavailable");waitFor(()->DeckAccessibilityService.connected!=null,"DuoDash accessibility controls unavailable");
+        SharedPreferences uiPrefs=context.getSharedPreferences("ui",Context.MODE_PRIVATE),profiles=context.getSharedPreferences("display_profiles",Context.MODE_PRIVATE);
+        Map<String,?> originalUi=new HashMap<>(uiPrefs.getAll()),originalProfiles=new HashMap<>(profiles.getAll());AudioManager audio=context.getSystemService(AudioManager.class);
+        require(audio!=null,"Android audio service unavailable");int originalStream=audio.getStreamVolume(AudioManager.STREAM_MUSIC);boolean originalMute=audio.isStreamMute(AudioManager.STREAM_MUSIC);
+        boolean wasPanel=(Boolean)field(service,"panelShowing"),wasSettings=service.settingsOpen;String oldCategory=settingsPage()==null?"output":settingsPage().category();boolean passed=false;
+        try{
+            ui(()->{uiPrefs.edit().putString("shortcuts","139").putString(ShortcutBindings.PREF,"").commit();DeckAccessibilityService.connected.reloadShortcuts();controller.configureShortcuts();service.performControl("shortcuts");});
+            waitFor(this::shortcutSettingsLaidOut,"Shortcuts settings page did not open with measured bounds");
+            ShortcutSettingsView page=shortcutSettings();
+            ui(()->saveShortcutSettingsFrame(page,"control-shortcuts-page.png"));
+            InlineShortcutEditor dashboard=shortcutEditor(page,ShortcutBindings.TOGGLE);java.util.concurrent.atomic.AtomicReference<View> protectedRemoveRef=new java.util.concurrent.atomic.AtomicReference<>();
+            ui(()->protectedRemoveRef.set(described(dashboard,"At least one shortcut is required")));View protectedRemove=protectedRemoveRef.get();
+            require(protectedRemove!=null&&!protectedRemove.isEnabled(),"The last DuoDash shortcut can be removed");ui(protectedRemove::performClick);require("139".equals(uiPrefs.getString("shortcuts","")),"Removing the final DuoDash binding changed the saved shortcut");
+            ui(()->textView(page,"Add a control shortcut").performClick());ui(()->textView(page,"Mute master audio").performClick());
+            InlineShortcutEditor mute=shortcutEditor(page,"mute_master");ui(mute::addBinding);sendChord(mute,139);
+            ui(()->textView(mute,"Save shortcut").performClick());require(!new ShortcutBindings("139",uiPrefs.getString(ShortcutBindings.PREF,"")).controls().containsKey("mute_master"),"A control binding conflicting with DuoDash was saved");
+            ui(()->require(textContaining(mute,"Already used")!=null,"The conflicting shortcut was not explained"));
+            ui(()->textView(mute,"Try again").performClick());sendChord(mute,104,105,106);ui(()->textView(mute,"Save shortcut").performClick());
+            require("104,105,106".equals(new ShortcutBindings("139",uiPrefs.getString(ShortcutBindings.PREF,"")).shortcuts("mute_master")),"Three-button control binding did not save");
+            String token=new String(java.nio.file.Files.readAllBytes(new File(context.getFilesDir(),"bridge-token").toPath()),java.nio.charset.StandardCharsets.UTF_8).trim();
+            Intent dispatch=new Intent(context,GamepadShortcutReceiver.class).setAction("dev.nova.deck.GAMEPAD_EVENT").putExtra("token",token).putExtra("shortcut_action","mute_master");
+            boolean muteBefore=audio.isStreamMute(AudioManager.STREAM_MUSIC);new GamepadShortcutReceiver().onReceive(context,dispatch);
+            waitFor(()->audio.isStreamMute(AudioManager.STREAM_MUSIC)!=muteBefore,"Authenticated controller shortcut did not run the saved mute action");
+            require(audio.isStreamMute(AudioManager.STREAM_MUSIC)==!muteBefore,"Saved mute shortcut produced the wrong action state");
+            new GamepadShortcutReceiver().onReceive(context,dispatch);waitFor(()->audio.isStreamMute(AudioManager.STREAM_MUSIC)==muteBefore,"Second saved mute shortcut did not restore the original audio state");
+            InlineShortcutEditor updated=shortcutEditor(page,"mute_master");java.util.concurrent.atomic.AtomicReference<View> replaceRef=new java.util.concurrent.atomic.AtomicReference<>();ui(()->replaceRef.set(described(updated,"Replace ")));View replace=replaceRef.get();require(replace!=null,"Saved binding cannot be tapped to replace");ui(replace::performClick);sendChord(updated,102,103);ui(()->textView(updated,"Save shortcut").performClick());
+            require("102,103".equals(new ShortcutBindings("139",uiPrefs.getString(ShortcutBindings.PREF,"")).shortcuts("mute_master")),"Replacing a control shortcut left the old chord");
+            InlineShortcutEditor replaced=shortcutEditor(page,"mute_master");java.util.concurrent.atomic.AtomicReference<View> removeRef=new java.util.concurrent.atomic.AtomicReference<>();ui(()->removeRef.set(described(replaced,"Remove ")));View remove=removeRef.get();require(remove!=null,"Control binding removal is unavailable");ui(remove::performClick);
+            require(!new ShortcutBindings("139",uiPrefs.getString(ShortcutBindings.PREF,"")).controls().containsKey("mute_master"),"Removing the control binding did not clear its section");
+            require(originalStream==audio.getStreamVolume(AudioManager.STREAM_MUSIC),"Shortcut action changed the media volume level");passed=true;
+        }finally{
+            if(service!=null&&shortcutSettings()!=null)ui(()->shortcutSettings().cancelPending());
+            if(audio.isStreamMute(AudioManager.STREAM_MUSIC)!=originalMute)audio.adjustStreamVolume(AudioManager.STREAM_MUSIC,originalMute?AudioManager.ADJUST_MUTE:AudioManager.ADJUST_UNMUTE,0);
+            if(audio.getStreamVolume(AudioManager.STREAM_MUSIC)!=originalStream)audio.setStreamVolume(AudioManager.STREAM_MUSIC,originalStream,0);
+            restoreAllPreferences(uiPrefs,originalUi);restoreAllPreferences(profiles,originalProfiles);
+            if(DeckAccessibilityService.connected!=null)DeckAccessibilityService.connected.reloadShortcuts();if(controller!=null)controller.configureShortcuts();
+            ui(()->{if(service!=null&&settingsPage()!=null){if(wasSettings)settingsPage().selectCategory(oldCategory);else service.exitSettingsPage();}});
+            if(!wasPanel&&service!=null)service.closePanel();
+            require(originalUi.equals(uiPrefs.getAll()),"Shortcuts test did not restore all UI preferences");require(originalProfiles.equals(profiles.getAll()),"Shortcuts test did not restore all display profile preferences");
+            require(originalMute==audio.isStreamMute(AudioManager.STREAM_MUSIC)&&originalStream==audio.getStreamVolume(AudioManager.STREAM_MUSIC),"Shortcuts test did not restore Android media state");
+        }
+        require(passed,"Shortcut UI test did not complete");
+    }
+    private void checkOverlapShortcuts(UiAutomation automation)throws Exception{
+        Context context=getTargetContext();require(SetupReadiness.hasCompletedSetup(context),"Complete DuoDash setup before testing shortcuts");
+        rebindEnabledAccessibilityService(automation);OnDeviceBridge.reconnectAndStart(context);context.startForegroundService(new Intent(context,OverlayService.class).setAction(OverlayService.SHOW));
+        waitFor(()->{ui(()->{service=OverlayService.current;if(service!=null)try{controller=(DeckController)field(service,"controller");}catch(Exception e){throw new RuntimeException(e);}});return controller!=null;},"Overlay service missing");
+        waitFor(()->controller.state.bridgeReady&&DeckAccessibilityService.connected!=null,"System controls unavailable");
+        SharedPreferences uiPrefs=context.getSharedPreferences("ui",0),profiles=context.getSharedPreferences("display_profiles",0);Map<String,?> oldUi=new HashMap<>(uiPrefs.getAll()),oldProfiles=new HashMap<>(profiles.getAll());
+        AudioManager audio=context.getSystemService(AudioManager.class);int volume=audio.getStreamVolume(AudioManager.STREAM_MUSIC);boolean muted=audio.isStreamMute(AudioManager.STREAM_MUSIC);boolean wasPanel=(Boolean)field(service,"panelShowing"),wasSettings=service.settingsOpen;String oldCategory=settingsPage()==null?"output":settingsPage().category();
+        try{
+            ui(()->{uiPrefs.edit().putString("shortcuts","98").putString(ShortcutBindings.PREF,"").commit();DeckAccessibilityService.connected.reloadShortcuts();controller.configureShortcuts();service.performControl("shortcuts");});
+            waitFor(this::shortcutSettingsLaidOut,"Shortcuts settings did not open");ShortcutSettingsView page=shortcutSettings();
+            ui(()->textView(page,"Add a control shortcut").performClick());ui(()->textView(page,"Mute master audio").performClick());InlineShortcutEditor editor=shortcutEditor(page,"mute_master");sendChord(editor,98,101);ui(()->textView(editor,"Save shortcut").performClick());
+            require("98,101".equals(new ShortcutBindings("98",uiPrefs.getString(ShortcutBindings.PREF,"")).shortcuts("mute_master")),"Overlapping C and C+Z bindings were not saved");
+            ui(()->require(textContaining(page,"on release")!=null,"Deferred shortcut did not show its release hint"));
+            ui(()->service.exitSettingsPage());waitFor(()->settingsPage()==null,"Settings page did not close");ui(()->service.closePanel());waitFor(()->panel()==null,"Dashboard did not close");Thread.sleep(500);
+            DeckAccessibilityService access=DeckAccessibilityService.connected;access.reloadShortcuts();
+            accessibilityKey(KeyEvent.ACTION_DOWN,98);require(panel()==null,"DuoDash C toggled before the longer C+Z chord completed");accessibilityKey(KeyEvent.ACTION_UP,98);waitFor(()->panel()!=null,"DuoDash C did not toggle after release without Z");
+            ui(()->service.closePanel());waitFor(()->panel()==null,"Dashboard did not close after C shortcut");Thread.sleep(500);
+            accessibilityKey(KeyEvent.ACTION_DOWN,98);accessibilityKey(KeyEvent.ACTION_DOWN,101);waitFor(()->audio.isStreamMute(AudioManager.STREAM_MUSIC)!=muted,"C+Z did not dispatch the control shortcut");
+            accessibilityKey(KeyEvent.ACTION_UP,98);accessibilityKey(KeyEvent.ACTION_UP,101);Thread.sleep(500);require(panel()==null,"Releasing the completed C+Z chord also toggled DuoDash");
+            accessibilityKey(KeyEvent.ACTION_DOWN,98);accessibilityKey(KeyEvent.ACTION_DOWN,101);waitFor(()->audio.isStreamMute(AudioManager.STREAM_MUSIC)==muted,"Second C+Z action did not restore the original mute state");
+            accessibilityKey(KeyEvent.ACTION_UP,101);accessibilityKey(KeyEvent.ACTION_UP,98);Thread.sleep(500);require(panel()==null,"Reverse release order of C+Z toggled DuoDash");
+            require(audio.getStreamVolume(AudioManager.STREAM_MUSIC)==volume,"Overlap shortcut changed master volume level");
+        }finally{
+            if(service!=null&&shortcutSettings()!=null)ui(()->shortcutSettings().cancelPending());
+            if(audio.isStreamMute(AudioManager.STREAM_MUSIC)!=muted)audio.adjustStreamVolume(AudioManager.STREAM_MUSIC,muted?AudioManager.ADJUST_MUTE:AudioManager.ADJUST_UNMUTE,0);
+            if(audio.getStreamVolume(AudioManager.STREAM_MUSIC)!=volume)audio.setStreamVolume(AudioManager.STREAM_MUSIC,volume,0);
+            restoreAllPreferences(uiPrefs,oldUi);restoreAllPreferences(profiles,oldProfiles);if(DeckAccessibilityService.connected!=null)DeckAccessibilityService.connected.reloadShortcuts();if(controller!=null)controller.configureShortcuts();
+            ui(()->{if(service!=null&&settingsPage()!=null){if(wasSettings)settingsPage().selectCategory(oldCategory);else service.exitSettingsPage();}if(service!=null&&panel()!=null)service.closePanel();});
+            if(wasPanel)context.startForegroundService(new Intent(context,OverlayService.class).setAction(OverlayService.SHOW));
+            require(oldUi.equals(uiPrefs.getAll()),"Overlap test did not restore UI preferences");require(oldProfiles.equals(profiles.getAll()),"Overlap test did not restore display profiles");require(audio.isStreamMute(AudioManager.STREAM_MUSIC)==muted&&audio.getStreamVolume(AudioManager.STREAM_MUSIC)==volume,"Overlap test did not restore audio state");
+        }
+    }
+    private void accessibilityKey(int action,int code){ui(()->{DeckAccessibilityService access=DeckAccessibilityService.connected;require(access!=null,"DuoDash accessibility service disconnected");access.onKeyEvent(new KeyEvent(action,code));});}
+    private ShortcutSettingsView shortcutSettings(){return (ShortcutSettingsView)fieldUnchecked(service,"shortcutSettings");}
+    private boolean shortcutSettingsLaidOut(){java.util.concurrent.atomic.AtomicReference<Boolean> ready=new java.util.concurrent.atomic.AtomicReference<>(false);ui(()->{ShortcutSettingsView view=shortcutSettings();ready.set(view!=null&&view.isAttachedToWindow()&&view.isLaidOut()&&view.getWidth()>0&&view.getHeight()>0);});return ready.get();}
+    private SettingsPageView settingsPage(){return (SettingsPageView)fieldUnchecked(service,"settingsPage");}
+    private InlineShortcutEditor shortcutEditor(ShortcutSettingsView page,String action)throws Exception{
+        AtomicReference<InlineShortcutEditor> result=new AtomicReference<>();AtomicReference<Throwable> failure=new AtomicReference<>();ui(()->{try{for(InlineShortcutEditor editor:page.editors())if(action.equals(field(editor,"actionId"))){result.set(editor);return;}throw new AssertionError("Shortcut editor missing for "+action);}catch(Throwable error){failure.set(error);}});
+        if(failure.get()!=null)throw new RuntimeException(failure.get());return result.get();
+    }
+    private void sendChord(InlineShortcutEditor editor,int...keys){
+        ui(()->{DeckAccessibilityService connected=DeckAccessibilityService.connected;require(connected!=null&&connected.recorder!=null,"Native shortcut recorder did not start");DeckAccessibilityService.Recorder recorder=connected.recorder;for(int key:keys)recorder.event(new KeyEvent(KeyEvent.ACTION_DOWN,key));for(int i=keys.length-1;i>=0;i--)recorder.event(new KeyEvent(KeyEvent.ACTION_UP,keys[i]));});
+    }
+    private void saveShortcutSettingsFrame(View view,String filename){
+        require(view.getWidth()>0&&view.getHeight()>0,"Shortcut settings page has no measured frame");Bitmap bitmap=Bitmap.createBitmap(view.getWidth(),view.getHeight(),Bitmap.Config.ARGB_8888);
+        try(FileOutputStream output=new FileOutputStream(new File(getTargetContext().getFilesDir(),filename))){view.draw(new Canvas(bitmap));require(bitmap.compress(Bitmap.CompressFormat.PNG,100,output),"Could not save shortcut settings frame");}catch(IOException error){throw new RuntimeException(error);}finally{bitmap.recycle();}
+    }
+    private void restoreAllPreferences(SharedPreferences prefs,Map<String,?> values){
+        SharedPreferences.Editor edit=prefs.edit().clear();for(Map.Entry<String,?> entry:values.entrySet()){Object v=entry.getValue();String key=entry.getKey();if(v instanceof Boolean)edit.putBoolean(key,(Boolean)v);else if(v instanceof Integer)edit.putInt(key,(Integer)v);else if(v instanceof Long)edit.putLong(key,(Long)v);else if(v instanceof Float)edit.putFloat(key,(Float)v);else if(v instanceof String)edit.putString(key,(String)v);else if(v instanceof Set)edit.putStringSet(key,new HashSet<>((Set<String>)v));}edit.commit();
+    }
+
     private void checkDebuggingKeepAlive(UiAutomation automation) throws Exception {
         Context context=getTargetContext();
         int originalWireless=android.provider.Settings.Global.getInt(context.getContentResolver(),"adb_wifi_enabled",0);
@@ -1284,6 +1383,8 @@ public final class DeviceChecks extends Instrumentation {
             }
             UiAutomation automation=getUiAutomation(UiAutomation.FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES);
             if("debuggingkeepalive".equals(launchArguments==null?null:launchArguments.getString("mode"))){checkDebuggingKeepAlive(automation);result.putString("checks","USB-off restore and cold startup enabled USB debugging; helper and physical brightness control survived Wireless debugging and Wi-Fi off; profiles and backlight restored");pass=true;finish(Activity.RESULT_OK,result);return;}
+            if("controlshortcuts".equals(launchArguments==null?null:launchArguments.getString("mode"))){checkControlShortcuts(automation);result.putString("capture","control-shortcuts-page.png");result.putString("checks","DuoDash final binding remained protected; conflicting control combo was rejected; three-key combo saved, authenticated mute action ran, replacement and removal restored clean bindings; UI and profile preferences were preserved");pass=true;finish(Activity.RESULT_OK,result);return;}
+            if("overlapshortcuts".equals(launchArguments==null?null:launchArguments.getString("mode"))){checkOverlapShortcuts(automation);result.putString("checks","C waited for release, C+Z dispatched master mute without toggling the dashboard in either release order; UI, profiles and audio were restored");pass=true;finish(Activity.RESULT_OK,result);return;}
             if("quickpanel".equals(launchArguments==null?null:launchArguments.getString("mode"))){checkQuickPanel(automation);result.putString("checks","Optional Quick settings opened the focused Android shade after closing DuoDash; default Settings unchanged; profiles preserved");pass=true;finish(Activity.RESULT_OK,result);return;}
             if("pairingpanel".equals(launchArguments==null?null:launchArguments.getString("mode"))){
                 String geometry=checkPairingPanel();result.putString("panel_geometry",geometry);
@@ -1371,7 +1472,7 @@ public final class DeviceChecks extends Instrumentation {
                 result.putString("checks","First-frame and settled main-display MATCH_PARENT bounds, dashboard, Settings modal, and edit-mode screenshots verified");result.putString("first_frame_geometry",firstFrameGeometry[0]);result.putString("settled_panel_geometry",geometry[0]);pass=true;finish(Activity.RESULT_OK,result);return;
             }
             String requestedMode=launchArguments==null?null:launchArguments.getString("mode");
-            if(requestedMode!=null)require(Arrays.asList("componentrender","sliders","fadergesture","fadermute","bluetoothwide","bridge","helperbuild","bootrecovery","securewrite","headertelemetry","logicalcanvas","batteryui","dashboard","restore","pairnotify","pair","snapshotui","setupgate","pairingpanel").contains(requestedMode),"Unknown DeviceChecks mode; refusing to fall through to the full native suite: "+requestedMode);
+            if(requestedMode!=null)require(Arrays.asList("componentrender","sliders","fadergesture","fadermute","bluetoothwide","bridge","helperbuild","bootrecovery","securewrite","headertelemetry","logicalcanvas","batteryui","dashboard","restore","pairnotify","pair","snapshotui","setupgate","pairingpanel","controlshortcuts","overlapshortcuts").contains(requestedMode),"Unknown DeviceChecks mode; refusing to fall through to the full native suite: "+requestedMode);
             getTargetContext().startForegroundService(new Intent(getTargetContext(),OverlayService.class).setAction(OverlayService.SHOW));
             waitFor(()->{ui(()->{service=OverlayService.current;if(service!=null)try{controller=(DeckController)field(service,"controller");}catch(Exception e){throw new RuntimeException(e);}});return controller!=null;},"Service missing");
             waitFor(()->controller.state.bridgeReady,"System helper unavailable");
